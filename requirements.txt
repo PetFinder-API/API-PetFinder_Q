@@ -1,0 +1,7 @@
+Flask
+torch
+timm
+fastcore
+torchvision
+Pillow
+flask_cors
