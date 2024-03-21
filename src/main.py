@@ -9,17 +9,19 @@ from timm import create_model
 from torchvision import transforms
 import logging
 
-
 app = Flask(__name__)
-CORS(app)
+CORS(app, origins='http://localhost:3000')
 logging.basicConfig(level=logging.DEBUG)
 
 # Obtenez le chemin absolu du dossier actuel
 current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
 
-# Définissez le chemin relatif vers le dossier d'images
-images_dir = os.path.join(current_dir, 'images')
+# Définissez le chemin absolu vers le dossier d'images
+images_dir = os.path.join(parent_dir, 'images')
 
+# Déclaration de la variable modèle en dehors de la fonction load_model
+model = None
 
 def load_model():
     print("Load model...")
@@ -27,7 +29,7 @@ def load_model():
     model = create_model('swin_large_patch4_window7_224', pretrained=True, num_classes=1)
 
     # Charger l'état du modèle à partir du fichier checkpoint
-    checkpoint_path = os.path.join(current_dir, '../model.pth')  # Utilisez le chemin absolu
+    checkpoint_path = os.path.join(os.path.dirname(current_dir), 'model.pth')
     checkpoint = torch.load(checkpoint_path, map_location=torch.device('cpu'))
     model.load_state_dict(checkpoint)
 
@@ -36,36 +38,53 @@ def load_model():
     print(f"The model got loaded in {end_time - start_time} seconds")
     return model
 
+model = load_model()
 
 def predict(image_id: str) -> float:
+    image_path = os.path.join(images_dir, f"{image_id}")
 
-    image_path = f"{image_id}.jpg"
     preprocess = transforms.Compose([
         transforms.Resize(224),
         transforms.CenterCrop(224),
         transforms.ToTensor()
     ])
-    img = Image.open(os.path.join(images_dir, image_path)).convert('RGB')
+    img = Image.open(image_path).convert('RGB')
     img_processed = preprocess(img)
     img_batch = img_processed.unsqueeze(0)
     prediction = model(img_batch)
     return prediction.item()
 
-
 @app.route('/prediction-pet-score', methods=['POST'])
 def home():
     if request.is_json:
         data = request.get_json()
-        print(data)
+        print("Received JSON data:", data)
+
         img_path = data.get('img_path')
-        logging.debug("Received request with image path: %s", img_path)  # Ajoutez cette ligne pour afficher le chemin de l'image
+        print("Image path received:", img_path)
+
         if img_path:
-            score = predict(img_path)
-            result = {"score": score}
-            return jsonify(result), 200
+            # Construire le chemin absolu de l'image
+            abs_img_path = os.path.join(images_dir, img_path)
+            print("Absolute image path:", abs_img_path)
+
+            # Vérifier si le fichier image existe
+            if os.path.exists(abs_img_path):
+                print("Image file exists.")
+                # Prédire le score
+                score = predict(img_path)
+                result = {"score": score}
+
+                # Renvoyer le score prédit dans la réponse JSON
+                return jsonify(result), 200
+            else:
+                print("Image file does not exist.")
+                return jsonify({"error": "Image not found"}), 404
         else:
+            print("Image path not provided.")
             return jsonify({"error": "Image path not provided"}), 400
     else:
+        print("Request is not JSON.")
         return jsonify({"error": "Request must be JSON"}), 400
 
 if __name__ == '__main__':
