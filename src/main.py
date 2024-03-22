@@ -73,7 +73,7 @@ def home():
                 print("Image file exists.")
                 # Prédire le score
                 score = predict(img_path)
-                result = {"score": score}
+                result = {"score": round(score, 2)}
 
                 # Renvoyer le score prédit dans la réponse JSON
                 return jsonify(result), 200
